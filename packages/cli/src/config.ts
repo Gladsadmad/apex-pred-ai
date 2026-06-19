@@ -40,15 +40,22 @@ const store = new Conf<ApexConfig>({
 
 export function getConfig(): ApexConfig {
   const config = store.store;
+
   const apiKey =
     process.env['ANTHROPIC_API_KEY'] ??
     process.env['APEX_API_KEY'] ??
     config.apiKey;
 
   const model = process.env['APEX_MODEL'] ?? config.model;
-  const maxTokens = process.env['APEX_MAX_TOKENS']
-    ? parseInt(process.env['APEX_MAX_TOKENS'], 10)
-    : config.maxTokens;
+
+  // Guard against non-numeric APEX_MAX_TOKENS values
+  let maxTokens = config.maxTokens;
+  const maxTokensEnv = process.env['APEX_MAX_TOKENS'];
+  if (maxTokensEnv) {
+    const parsed = parseInt(maxTokensEnv, 10);
+    if (!isNaN(parsed) && parsed > 0) maxTokens = parsed;
+  }
+
   const debug = process.env['APEX_DEBUG'] === 'true' || config.debug;
 
   return { ...config, apiKey, model, maxTokens, debug };

@@ -13,7 +13,7 @@ try {
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
   version = pkg.version;
 } catch {
-  // ignore
+  // ignore — fall back to hardcoded version
 }
 
 program
@@ -48,15 +48,25 @@ program
   .option('-k, --key <key>', 'Set Anthropic API key')
   .option('-m, --model <model>', 'Set default model')
   .option('-t, --max-tokens <tokens>', 'Set max tokens per response', parseInt)
-  .option('--no-stream', 'Disable streaming by default')
-  .option('--stream', 'Enable streaming by default')
-  .option('--debug', 'Enable debug mode')
-  .option('--no-debug', 'Disable debug mode')
+  .option('--enable-stream', 'Enable streaming by default')
+  .option('--disable-stream', 'Disable streaming by default')
+  .option('--enable-debug', 'Enable debug mode')
+  .option('--disable-debug', 'Disable debug mode')
   .option('--show', 'Show current config and exit')
   .action((opts) => {
     const config = getConfig();
 
-    if (opts['show'] || Object.keys(opts).every(k => !opts[k])) {
+    // Determine whether any write flags were explicitly passed
+    const hasUpdate =
+      opts['key'] ||
+      opts['model'] ||
+      opts['maxTokens'] ||
+      opts['enableStream'] ||
+      opts['disableStream'] ||
+      opts['enableDebug'] ||
+      opts['disableDebug'];
+
+    if (opts['show'] || !hasUpdate) {
       console.log(chalk.hex('#FF4500').bold('\nApex-Pred AI Configuration'));
       console.log(chalk.hex('#888888')(`Config file: ${getConfigPath()}\n`));
       console.log(`  API Key:    ${config.apiKey ? chalk.green('✓ set') : chalk.red('✗ not set')}`);
@@ -72,8 +82,11 @@ program
     if (opts['key']) updates['apiKey'] = opts['key'];
     if (opts['model']) updates['model'] = opts['model'];
     if (opts['maxTokens']) updates['maxTokens'] = opts['maxTokens'];
-    if ('stream' in opts) updates['streamingEnabled'] = opts['stream'];
-    if ('debug' in opts) updates['debug'] = opts['debug'];
+    // Use explicit enable/disable flags so Commander defaults never bleed in
+    if (opts['enableStream']) updates['streamingEnabled'] = true;
+    if (opts['disableStream']) updates['streamingEnabled'] = false;
+    if (opts['enableDebug']) updates['debug'] = true;
+    if (opts['disableDebug']) updates['debug'] = false;
 
     setConfig(updates);
     console.log(chalk.green('\n✓ Configuration updated.\n'));

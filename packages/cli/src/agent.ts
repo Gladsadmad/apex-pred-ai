@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type {
-  ContentBlock,
   TextBlock,
+  ToolResultBlockParam,
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/messages.js';
 import ora from 'ora';
@@ -10,7 +10,6 @@ import { theme } from './ui/theme.js';
 import { renderMarkdown, renderToolCall } from './ui/renderer.js';
 import { APEX_PRED_SYSTEM_PROMPT } from './personality.js';
 import { createToolRegistry, getToolSpecs } from './tools/index.js';
-import type { ToolResult } from './tools/types.js';
 import type { ApexConfig } from './config.js';
 import { SessionManager } from './session.js';
 
@@ -34,7 +33,6 @@ export class ApexPredAgent {
 
   async chat(userMessage: string): Promise<void> {
     this.session.addMessage({ role: 'user', content: userMessage });
-
     await this.runAgentLoop();
     await this.session.save();
   }
@@ -73,16 +71,13 @@ export class ApexPredAgent {
           process.stdout.write('\n');
         }
 
+        // stop_reason 'tool_use' with no tool blocks = malformed response; break to avoid loop
         if (response.stop_reason === 'end_turn' || toolBlocks.length === 0) {
           break;
         }
 
         const toolResults = await this.executeTools(toolBlocks);
-
-        this.session.addMessage({
-          role: 'user',
-          content: toolResults,
-        });
+        this.session.addMessage({ role: 'user', content: toolResults });
       } catch (err) {
         spinner.stop();
         const error = err as { message: string; status?: number };
@@ -99,8 +94,8 @@ export class ApexPredAgent {
     }
   }
 
-  private async executeTools(toolBlocks: ToolUseBlock[]): Promise<ToolResult[]> {
-    const results: ToolResult[] = [];
+  private async executeTools(toolBlocks: ToolUseBlock[]): Promise<ToolResultBlockParam[]> {
+    const results: ToolResultBlockParam[] = [];
 
     for (const block of toolBlocks) {
       const toolDef = this.tools.get(block.name);
@@ -164,9 +159,6 @@ export class ApexPredAgent {
     while (true) {
       process.stdout.write('\n' + theme.aiLabel());
 
-      const collectedContent: ContentBlock[] = [];
-      let fullText = '';
-
       try {
         const stream = await this.client.messages.stream({
           model: this.config.model,
@@ -179,7 +171,6 @@ export class ApexPredAgent {
         for await (const chunk of stream) {
           if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
             process.stdout.write(chunk.delta.text);
-            fullText += chunk.delta.text;
           }
         }
 
@@ -212,9 +203,6 @@ export class ApexPredAgent {
         }
         break;
       }
-
-      void collectedContent;
-      void fullText;
     }
   }
 

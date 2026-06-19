@@ -1,13 +1,12 @@
 """Tests for Apex-Pred AI agent and tools."""
 from __future__ import annotations
 
-import asyncio
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio  # noqa: F401  — ensures asyncio mode is registered
 
 from apex_pred.config import ApexConfig
 from apex_pred.session import SessionManager
@@ -15,6 +14,10 @@ from apex_pred.tools.file_tools import _read_file, _write_file, _edit_file, _lis
 from apex_pred.tools.bash_tools import _bash
 from apex_pred.tools.web_tools import _web_fetch
 
+
+# ---------------------------------------------------------------------------
+# SessionManager
+# ---------------------------------------------------------------------------
 
 class TestSessionManager:
     def test_init(self) -> None:
@@ -47,6 +50,11 @@ class TestSessionManager:
             sessions = SessionManager.list_sessions(tmpdir)
             assert session.session_id in sessions
 
+
+# ---------------------------------------------------------------------------
+# File tools — each async test method needs an explicit mark so pytest-asyncio
+# collects them correctly under asyncio_mode = "auto" with class-based tests
+# ---------------------------------------------------------------------------
 
 class TestFileTools:
     @pytest.mark.asyncio
@@ -103,12 +111,16 @@ class TestFileTools:
         assert "Error" in result
 
 
+# ---------------------------------------------------------------------------
+# Bash tool
+# ---------------------------------------------------------------------------
+
 class TestBashTools:
     @pytest.mark.asyncio
     async def test_echo(self) -> None:
         import platform
         if platform.system() == "Windows":
-            result = await _bash("echo hello")
+            result = await _bash('Write-Output "hello"')
         else:
             result = await _bash("echo hello")
         assert "hello" in result.lower()
@@ -128,6 +140,10 @@ class TestBashTools:
         assert "Blocked" in result
 
 
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
 class TestApexConfig:
     def test_defaults(self) -> None:
         config = ApexConfig()
@@ -145,3 +161,13 @@ class TestApexConfig:
         monkeypatch.setenv("APEX_MODEL", "claude-opus-4-8")
         config = ApexConfig()
         assert config.effective_model() == "claude-opus-4-8"
+
+    def test_invalid_max_tokens_env_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("APEX_MAX_TOKENS", "not-a-number")
+        config = ApexConfig()
+        assert config.effective_max_tokens() == config.max_tokens
+
+    def test_valid_max_tokens_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("APEX_MAX_TOKENS", "4096")
+        config = ApexConfig()
+        assert config.effective_max_tokens() == 4096

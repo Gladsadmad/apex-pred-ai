@@ -1,5 +1,7 @@
-import fetch from 'node-fetch';
 import type { ToolDefinition } from './types.js';
+
+// Node 18+ ships fetch as a global; no extra dependency needed
+declare const fetch: typeof globalThis.fetch;
 
 export const webFetchTool: ToolDefinition = {
   spec: {
@@ -26,9 +28,7 @@ export const webFetchTool: ToolDefinition = {
 
     try {
       const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Apex-Pred-AI/1.0 (terminal assistant)',
-        },
+        headers: { 'User-Agent': 'Apex-Pred-AI/1.0 (terminal assistant)' },
         signal: AbortSignal.timeout(15000),
       });
 
@@ -41,8 +41,7 @@ export const webFetchTool: ToolDefinition = {
 
       if (contentType.includes('json')) {
         try {
-          const parsed = JSON.parse(text);
-          return JSON.stringify(parsed, null, 2).slice(0, maxLength);
+          return JSON.stringify(JSON.parse(text), null, 2).slice(0, maxLength);
         } catch {
           return text.slice(0, maxLength);
         }
@@ -76,7 +75,7 @@ export const webSearchTool: ToolDefinition = {
         },
         max_results: {
           type: 'number',
-          description: 'Maximum number of results (default: 5)',
+          description: 'Maximum number of results to return (default: 5)',
         },
       },
       required: ['query'],
@@ -89,9 +88,7 @@ export const webSearchTool: ToolDefinition = {
     try {
       const encoded = encodeURIComponent(query);
       const url = `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`;
-      const response = await fetch(url, {
-        signal: AbortSignal.timeout(10000),
-      });
+      const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
 
       if (!response.ok) {
         return `Search failed: HTTP ${response.status}`;
@@ -111,16 +108,18 @@ export const webSearchTool: ToolDefinition = {
       const results: string[] = [];
 
       if (data.AbstractText) {
-        results.push(`## Summary\n${data.AbstractText}\nSource: ${data.AbstractURL ?? data.AbstractSource}`);
+        results.push(
+          `## Summary\n${data.AbstractText}\nSource: ${data.AbstractURL ?? data.AbstractSource}`
+        );
       }
 
-      if (data.RelatedTopics && results.length < maxResults) {
+      if (data.RelatedTopics) {
         const topics = data.RelatedTopics
           .flatMap(t => t.Topics ?? [t])
-          .filter(t => t.Text && t.FirstURL)
-          .slice(0, maxResults);
+          .filter(t => t.Text && t.FirstURL);
 
         for (const topic of topics) {
+          if (results.length >= maxResults) break;
           results.push(`• ${topic.Text}\n  ${topic.FirstURL}`);
         }
       }
@@ -129,7 +128,7 @@ export const webSearchTool: ToolDefinition = {
         return `No results found for: "${query}"\nTry web_fetch with a specific URL instead.`;
       }
 
-      return results.join('\n\n');
+      return results.slice(0, maxResults).join('\n\n');
     } catch (err) {
       const error = err as { message: string };
       return `Search error: ${error.message}`;

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -11,8 +12,15 @@ from platformdirs import user_config_dir
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 CONFIG_DIR = Path(user_config_dir("apex-pred-ai"))
 CONFIG_FILE = CONFIG_DIR / "config.json"
+
+_VALID_FIELDS = {
+    "api_key", "model", "max_tokens", "debug",
+    "streaming_enabled", "session_history_dir", "theme", "swearing_level",
+}
 
 
 @dataclass
@@ -40,17 +48,27 @@ class ApexConfig:
 
     def effective_max_tokens(self) -> int:
         env_val = os.environ.get("APEX_MAX_TOKENS")
-        return int(env_val) if env_val else self.max_tokens
+        if env_val:
+            try:
+                parsed = int(env_val)
+                if parsed > 0:
+                    return parsed
+            except ValueError:
+                logger.warning("APEX_MAX_TOKENS=%r is not a valid integer; using config value", env_val)
+        return self.max_tokens
 
 
 def get_config() -> ApexConfig:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     if CONFIG_FILE.exists():
         try:
-            data = json.loads(CONFIG_FILE.read_text())
-            return ApexConfig(**{k: v for k, v in data.items() if k in ApexConfig.__dataclass_fields__})
-        except Exception:
-            pass
+            raw = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            # Only pass known fields; ignore unknown or wrongly-typed values
+            # rather than crashing with TypeError on unexpected data
+            known = {k: v for k, v in raw.items() if k in _VALID_FIELDS}
+            return ApexConfig(**known)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Config file is corrupt (%s); falling back to defaults", e)
     return ApexConfig()
 
 
@@ -60,7 +78,7 @@ def set_config(updates: dict) -> None:
         if hasattr(config, key):
             setattr(config, key, value)
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(asdict(config), indent=2))
+    CONFIG_FILE.write_text(json.dumps(asdict(config), indent=2), encoding="utf-8")
 
 
 def get_config_path() -> str:

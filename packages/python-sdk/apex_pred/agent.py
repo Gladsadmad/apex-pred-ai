@@ -44,7 +44,8 @@ class ApexPredAgent:
             )
             sys.exit(1)
 
-        self.client = anthropic.Anthropic(api_key=api_key)
+        # Use only the async client — calling the sync client inside an async
+        # function blocks the entire event loop for the duration of the API call
         self.async_client = anthropic.AsyncAnthropic(api_key=api_key)
         self.session = SessionManager(config.session_history_dir, config.effective_model())
 
@@ -57,7 +58,7 @@ class ApexPredAgent:
         while True:
             with console.status("[red]Apex-Pred thinking...[/red]", spinner="dots"):
                 try:
-                    response = self.client.messages.create(
+                    response = await self.async_client.messages.create(
                         model=self.config.effective_model(),
                         max_tokens=self.config.effective_max_tokens(),
                         system=APEX_PRED_SYSTEM_PROMPT,
@@ -75,7 +76,11 @@ class ApexPredAgent:
                     break
 
             self.session.update_tokens(response.usage.input_tokens + response.usage.output_tokens)
-            self.session.add_message({"role": "assistant", "content": response.content})
+
+            # Serialize content blocks to plain dicts before storing — Pydantic
+            # model objects (TextBlock, ToolUseBlock, etc.) are not JSON-serializable
+            serialized_content = [b.model_dump() for b in response.content]
+            self.session.add_message({"role": "assistant", "content": serialized_content})
 
             text_blocks = [b for b in response.content if b.type == "text"]
             tool_blocks = [b for b in response.content if b.type == "tool_use"]
@@ -117,7 +122,10 @@ class ApexPredAgent:
 
                 print()
                 self.session.update_tokens(final.usage.input_tokens + final.usage.output_tokens)
-                self.session.add_message({"role": "assistant", "content": final.content})
+
+                # Serialize content blocks to plain dicts before storing
+                serialized_content = [b.model_dump() for b in final.content]
+                self.session.add_message({"role": "assistant", "content": serialized_content})
 
                 tool_blocks = [b for b in final.content if b.type == "tool_use"]
                 if final.stop_reason == "end_turn" or not tool_blocks:

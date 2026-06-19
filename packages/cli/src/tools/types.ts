@@ -1,11 +1,8 @@
-import type { Tool } from '@anthropic-ai/sdk/resources/messages.js';
+import type { Tool, ToolResultBlockParam } from '@anthropic-ai/sdk/resources/messages.js';
 
-export interface ToolResult {
-  type: 'tool_result';
-  tool_use_id: string;
-  content: string;
-  is_error?: boolean;
-}
+// Re-export the SDK's own type to ensure perfect structural compatibility
+// when tool results are passed back as MessageParam content
+export type ToolResult = ToolResultBlockParam;
 
 export interface ToolExecutor {
   (input: Record<string, unknown>): Promise<string>;

@@ -51,6 +51,16 @@ export async function startInteractive(config: ApexConfig): Promise<void> {
 
   rl.prompt();
 
+  // Use the readline SIGINT event (scoped to this rl instance, no global listener leak)
+  rl.on('SIGINT', () => {
+    console.log(theme.muted('\n\nCaught interrupt. Apex-Pred out.\n'));
+    rl.close();
+    process.exit(0);
+  });
+
+  // Guard against concurrent chat calls if lines arrive while a response is streaming
+  let inFlight = false;
+
   rl.on('line', async (line) => {
     const input = line.trim();
 
@@ -105,6 +115,7 @@ export async function startInteractive(config: ApexConfig): Promise<void> {
         case '/exit':
         case '/quit':
           console.log(theme.muted('\nApex-Pred out. Stay sharp.\n'));
+          rl.close();
           process.exit(0);
           break;
 
@@ -116,6 +127,14 @@ export async function startInteractive(config: ApexConfig): Promise<void> {
       return;
     }
 
+    // Drop input that arrives while a response is already streaming
+    if (inFlight) {
+      console.log(theme.muted('  (still thinking — your message was dropped, try again in a moment)'));
+      rl.prompt();
+      return;
+    }
+
+    inFlight = true;
     rl.pause();
 
     try {
@@ -128,6 +147,7 @@ export async function startInteractive(config: ApexConfig): Promise<void> {
       const error = err as { message: string };
       console.error(theme.error(`\nUnexpected error: ${error.message}`));
     } finally {
+      inFlight = false;
       rl.resume();
       rl.prompt();
     }
@@ -135,11 +155,6 @@ export async function startInteractive(config: ApexConfig): Promise<void> {
 
   rl.on('close', () => {
     console.log(theme.muted('\nApex-Pred out. Stay sharp.\n'));
-    process.exit(0);
-  });
-
-  process.on('SIGINT', () => {
-    console.log(theme.muted('\n\nCaught interrupt. Apex-Pred out.\n'));
     process.exit(0);
   });
 }

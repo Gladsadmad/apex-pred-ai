@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
+from urllib.parse import quote_plus
 
 import httpx
 from anthropic.types import ToolParam
@@ -30,37 +31,49 @@ async def _web_fetch(url: str, max_length: int = 10000) -> str:
             stripped = re.sub(r"<[^>]+>", " ", stripped)
             stripped = re.sub(r"\s+", " ", stripped).strip()
             return stripped[:max_length]
+    except httpx.HTTPStatusError as e:
+        return f"HTTP {e.response.status_code}: {e.response.reason_phrase}"
     except Exception as e:
         return f"Fetch error: {e}"
 
 
 async def _web_search(query: str, max_results: int = 5) -> str:
+    # Use quote_plus for proper percent-encoding of all special characters
+    encoded = quote_plus(query)
+    url = f"https://api.duckduckgo.com/?q={encoded}&format=json&no_html=1&skip_disambig=1"
+
     try:
-        encoded = query.replace(" ", "+")
-        url = f"https://api.duckduckgo.com/?q={encoded}&format=json&no_html=1&skip_disambig=1"
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url)
+            response.raise_for_status()
             data = response.json()
 
-        results = []
+        results: list[str] = []
+
         if data.get("AbstractText"):
-            results.append(f"## Summary\n{data['AbstractText']}\nSource: {data.get('AbstractURL', '')}")
+            results.append(
+                f"## Summary\n{data['AbstractText']}\nSource: {data.get('AbstractURL', '')}"
+            )
 
         topics = data.get("RelatedTopics", [])
-        flat_topics = []
+        flat_topics: list[dict[str, Any]] = []
         for t in topics:
             if "Topics" in t:
                 flat_topics.extend(t["Topics"])
             else:
                 flat_topics.append(t)
 
-        for topic in flat_topics[:max_results]:
+        for topic in flat_topics:
+            if len(results) >= max_results:
+                break
             if topic.get("Text") and topic.get("FirstURL"):
                 results.append(f"• {topic['Text']}\n  {topic['FirstURL']}")
 
         if not results:
             return f'No results for "{query}". Try web_fetch with a specific URL.'
-        return "\n\n".join(results)
+        return "\n\n".join(results[:max_results])
+    except httpx.HTTPStatusError as e:
+        return f"Search failed: HTTP {e.response.status_code}"
     except Exception as e:
         return f"Search error: {e}"
 

@@ -1,15 +1,38 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { ToolDefinition } from './types.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
-async function git(command: string, cwd?: string): Promise<string> {
-  const { stdout, stderr } = await execAsync(`git ${command}`, {
-    cwd: cwd ?? process.cwd(),
+// Regex-based blocklist — resistant to whitespace variations and case differences
+const BLOCKED_GIT = [
+  /\bpush\s+.*--force\b/i,
+  /\bpush\s+-f\b/i,
+  /\breset\s+--hard\b/i,
+  /\bclean\s+-[a-z]*f/i,
+  /\bbranch\s+-D\b/i,
+];
+
+function isGitCommandBlocked(command: string): string | null {
+  for (const pattern of BLOCKED_GIT) {
+    if (pattern.test(command)) {
+      return `Blocked: "${command}" matches ${pattern.source}. Tell the user and let them decide.`;
+    }
+  }
+  return null;
+}
+
+async function runGit(command: string, cwd: string): Promise<string> {
+  // Split into args array so execFile never passes through a shell — no injection possible
+  const args = command.trim().split(/\s+/).filter(Boolean);
+  const { stdout, stderr } = await execFileAsync('git', args, {
+    cwd,
     timeout: 30000,
   });
-  return (stdout + stderr).trim();
+  const parts: string[] = [];
+  if (stdout.trim()) parts.push(stdout.trim());
+  if (stderr.trim()) parts.push(stderr.trim());
+  return parts.join('\n') || '(no output)';
 }
 
 export const gitTool: ToolDefinition = {
@@ -36,15 +59,11 @@ Provide the git subcommand and args (without the "git" prefix).`,
     const command = input['command'] as string;
     const cwd = (input['cwd'] as string | undefined) ?? process.cwd();
 
-    const blocked = ['push --force', 'reset --hard', 'clean -f', 'branch -D'];
-    for (const b of blocked) {
-      if (command.includes(b)) {
-        return `Blocked: "${b}" requires explicit user confirmation. Tell the user and let them decide.`;
-      }
-    }
+    const blockReason = isGitCommandBlocked(command);
+    if (blockReason) return blockReason;
 
     try {
-      return await git(command, cwd);
+      return await runGit(command, cwd);
     } catch (err) {
       const error = err as { message: string };
       return `git error: ${error.message}`;

@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "prepare": "npm run build",
     "dev": "tsc --watch",
     "clean": "rimraf dist",
     "lint": "eslint src --ext .ts",
@@ -22,14 +23,10 @@
     "commander": "^12.1.0",
     "conf": "^12.0.0",
     "glob": "^10.4.5",
-    "marked": "^12.0.0",
-    "marked-terminal": "^7.1.0",
-    "node-fetch": "^3.3.2",
     "ora": "^8.1.1",
     "strip-ansi": "^7.1.0"
   },
   "devDependencies": {
-    "@types/marked-terminal": "^6.1.0",
     "@types/node": "^20.14.0",
     "@typescript-eslint/eslint-plugin": "^7.13.0",
     "@typescript-eslint/parser": "^7.13.0",

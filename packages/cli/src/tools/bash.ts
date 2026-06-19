@@ -5,18 +5,21 @@ import type { ToolDefinition } from './types.js';
 
 const execAsync = promisify(exec);
 
-const BLOCKED_COMMANDS = [
-  /rm\s+-rf\s+\/(?!\S)/,
-  /mkfs/,
-  /dd\s+if=.*of=\/dev/,
-  /:(){ :|:& };:/,
-  /sudo\s+rm\s+-rf\s+\//,
+const BLOCKED_PATTERNS = [
+  /\brm\s+-rf\s+\/(?!\w)/i,           // rm -rf / and variants
+  /\brm\s+.*--no-preserve-root/i,       // rm --no-preserve-root
+  /\bmkfs\b/i,                           // filesystem format
+  /\bdd\s+if=.*of=\/dev/i,              // dd to raw device
+  /:\(\)\s*\{\s*:.*[|&].*:.*[;&]/,      // fork bomb pattern
+  /\bshutdown\b/i,
+  /\breboot\b/i,
+  /Remove-Item\s+.*-Recurse\b.*-Force\s+[CD]:\\/i,  // PowerShell rm -rf C:\
 ];
 
 function isCommandBlocked(command: string): string | null {
-  for (const pattern of BLOCKED_COMMANDS) {
+  for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(command)) {
-      return `Blocked command matches dangerous pattern: ${pattern}`;
+      return `Blocked: command matches dangerous pattern (${pattern.source})`;
     }
   }
   return null;
@@ -54,23 +57,30 @@ Commands time out after 30 seconds by default.`,
 
     const blockReason = isCommandBlocked(command);
     if (blockReason) {
-      return `Execution blocked: ${blockReason}`;
+      return blockReason;
     }
 
     const isWindows = os.platform() === 'win32';
-    const shell = isWindows ? 'powershell.exe' : '/bin/bash';
-    const shellFlag = isWindows ? '-Command' : '-c';
 
     try {
-      const { stdout, stderr } = await execAsync(
-        isWindows ? `${shell} ${shellFlag} "${command.replace(/"/g, '\\"')}"` : command,
-        {
+      let stdout: string;
+      let stderr: string;
+
+      if (isWindows) {
+        // Use -EncodedCommand with Base64 UTF-16LE to avoid all shell metacharacter injection
+        const encoded = Buffer.from(command, 'utf16le').toString('base64');
+        ({ stdout, stderr } = await execAsync(
+          `powershell.exe -NonInteractive -NoProfile -EncodedCommand ${encoded}`,
+          { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }
+        ));
+      } else {
+        ({ stdout, stderr } = await execAsync(command, {
           cwd,
           timeout: timeoutMs,
           maxBuffer: 10 * 1024 * 1024,
-          shell: isWindows ? undefined : shell,
-        }
-      );
+          shell: '/bin/bash',
+        }));
+      }
 
       const parts: string[] = [];
       if (stdout.trim()) parts.push(stdout.trim());
