@@ -35,17 +35,12 @@ SLASH_COMMANDS = {
 
 def print_banner() -> None:
     console.print(Text(APEX_PRED_BANNER, style="bold red"))
-    console.print(
-        Panel(
-            WELCOME_MESSAGE,
-            border_style="red",
-            padding=(0, 2),
-        )
-    )
+    console.print(Panel(WELCOME_MESSAGE, border_style="red", padding=(0, 2)))
 
 
-@app.command()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     message: Optional[list[str]] = typer.Argument(None, help="One-shot message to send"),
     key: Optional[str] = typer.Option(None, "--key", "-k", help="Anthropic API key"),
     model: Optional[str] = typer.Option(None, "--model", "-m", help="Model to use"),
@@ -54,22 +49,25 @@ def main(
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
 ) -> None:
     """Start Apex-Pred AI. Provide a message for one-shot mode, or run interactively."""
-    config = get_config()
+    if ctx.invoked_subcommand is not None:
+        return
+
+    cfg = get_config()
     if key:
-        config.api_key = key
+        cfg.api_key = key
     if model:
-        config.model = model
+        cfg.model = model
     if max_tokens:
-        config.max_tokens = max_tokens
+        cfg.max_tokens = max_tokens
     if no_stream:
-        config.streaming_enabled = False
+        cfg.streaming_enabled = False
     if debug:
-        config.debug = True
+        cfg.debug = True
 
     if message:
-        asyncio.run(_one_shot(" ".join(message), config))
+        asyncio.run(_one_shot(" ".join(message), cfg))
     else:
-        asyncio.run(_interactive(config))
+        asyncio.run(_interactive(cfg))
 
 
 async def _one_shot(message: str, config: ApexConfig) -> None:
@@ -113,13 +111,12 @@ async def _interactive(config: ApexConfig) -> None:
                 console.print()
 
             elif cmd == "/config":
-                c = config
                 console.print("\n[bold orange1]Current Config:[/bold orange1]")
-                console.print(f"  Model:      [yellow]{c.effective_model()}[/yellow]")
-                console.print(f"  Max Tokens: [yellow]{c.effective_max_tokens()}[/yellow]")
-                console.print(f"  Streaming:  [yellow]{c.streaming_enabled}[/yellow]")
-                console.print(f"  Debug:      [yellow]{c.debug}[/yellow]")
-                api_status = "[green]✓ set[/green]" if c.effective_api_key() else "[red]✗ missing[/red]"
+                console.print(f"  Model:      [yellow]{config.effective_model()}[/yellow]")
+                console.print(f"  Max Tokens: [yellow]{config.effective_max_tokens()}[/yellow]")
+                console.print(f"  Streaming:  [yellow]{config.streaming_enabled}[/yellow]")
+                console.print(f"  Debug:      [yellow]{config.debug}[/yellow]")
+                api_status = "[green]✓ set[/green]" if config.effective_api_key() else "[red]✗ missing[/red]"
                 console.print(f"  API Key:    {api_status}")
                 console.print()
 
@@ -178,7 +175,7 @@ def config(
         console.print()
         return
 
-    updates = {}
+    updates: dict[str, object] = {}
     if key:
         updates["api_key"] = key
     if model:

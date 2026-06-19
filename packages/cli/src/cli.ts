@@ -61,7 +61,6 @@ export async function startInteractive(config: ApexConfig): Promise<void> {
 
     if (input.startsWith('/')) {
       const cmd = input.split(' ')[0]?.toLowerCase();
-      const args = input.slice((cmd?.length ?? 0) + 1).trim();
 
       switch (cmd) {
         case '/help':
