@@ -1,0 +1,22 @@
+{
+  "name": "apex-pred-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Apex-Pred AI — the apex predator of AI assistants. A Claude Code-style CLI with personality.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev": "npm run dev -w packages/cli",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present && rimraf node_modules"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
