@@ -36,5 +36,32 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gladsadmad/apex-pred-ai.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/Gladsadmad/apex-pred-ai#readme",
+  "bugs": {
+    "url": "https://github.com/Gladsadmad/apex-pred-ai/issues"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "cli",
+    "anthropic",
+    "claude",
+    "terminal",
+    "coding-assistant"
+  ]
 }

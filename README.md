@@ -2,7 +2,7 @@
 
 > The apex predator of AI assistants. A Claude Code-style terminal AI with personality, tools, and absolutely no corporate bullshit.
 
-[![CI](https://github.com/YOUR_USERNAME/apex-pred-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/apex-pred-ai/actions/workflows/ci.yml)
+[![CI](https://github.com/Gladsadmad/apex-pred-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/Gladsadmad/apex-pred-ai/actions/workflows/ci.yml)
 [![npm version](https://badge.fury.io/js/%40apex-pred%2Fcli.svg)](https://badge.fury.io/js/%40apex-pred%2Fcli)
 [![PyPI version](https://badge.fury.io/py/apex-pred-ai.svg)](https://badge.fury.io/py/apex-pred-ai)
 
@@ -151,7 +151,7 @@ Config is stored at:
 ### Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/apex-pred-ai.git
+git clone https://github.com/Gladsadmad/apex-pred-ai.git
 cd apex-pred-ai
 
 # TypeScript CLI
