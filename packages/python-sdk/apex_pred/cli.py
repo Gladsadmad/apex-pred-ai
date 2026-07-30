@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import sys
 from importlib import metadata
 from typing import Any
 
@@ -14,6 +16,25 @@ from typer.core import TyperGroup
 from .agent import ApexPredAgent
 from .config import ApexConfig, get_config, get_config_path, set_config
 from .personality import APEX_PRED_BANNER, WELCOME_MESSAGE
+
+
+def _tolerate_narrow_encodings() -> None:
+    """Never crash on glyphs the active console encoding can't represent.
+
+    Legacy Windows consoles report cp1252 stdout, and C-locale Unix reports
+    ASCII; rich then dies with UnicodeEncodeError writing ✓/✗/⚡. Substituting
+    "?" for the odd glyph beats a crash — UTF-8 terminals are unaffected
+    because every glyph encodes and "replace" never fires.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            # Closed or exotic streams can refuse — leave those be
+            with contextlib.suppress(ValueError, OSError):
+                reconfigure(errors="replace")
+
+
+_tolerate_narrow_encodings()
 
 
 class ImplicitChatGroup(TyperGroup):

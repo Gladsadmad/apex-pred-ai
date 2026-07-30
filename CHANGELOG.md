@@ -23,6 +23,9 @@ All notable changes to Apex-Pred AI will be documented here.
 - Sharp personality — humor, natural language, brutal honesty
 
 ### Fixed
+- Python CLI crashed with `UnicodeEncodeError` on consoles that can't encode
+  ✓/✗ (legacy Windows cp1252, C-locale Unix) — unencodable glyphs now degrade
+  to `?` instead of dying
 - `apex-pred config` was unreachable — the one-shot message argument on the Typer
   callback swallowed subcommand names, so `config` was parsed as a chat message
 - npm package declared no `license` and pointed `main` at the self-executing CLI
