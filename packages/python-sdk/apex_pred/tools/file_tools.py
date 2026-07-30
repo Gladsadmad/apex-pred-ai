@@ -25,6 +25,8 @@ async def _read_file(path: str, start_line: int = 1, end_line: int | None = None
 
 async def _write_file(path: str, content: str) -> str:
     try:
+        if ".." in path:
+            raise Exception("Invalid file path")
         p = Path(path).resolve()
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
@@ -36,6 +38,8 @@ async def _write_file(path: str, content: str) -> str:
 
 async def _edit_file(path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
     try:
+        if ".." in path:
+            raise Exception("Invalid file path")
         p = Path(path).resolve()
         content = p.read_text(encoding="utf-8")
         count = content.count(old_string)
