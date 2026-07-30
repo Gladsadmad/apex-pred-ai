@@ -16,11 +16,12 @@ permissions:
 
 jobs:
   cli:
-    name: TypeScript CLI (Node ${{ matrix.node-version }})
-    runs-on: ubuntu-latest
+    name: TypeScript CLI (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: ['18', '20', '22']
     steps:
       - uses: actions/checkout@v4
@@ -79,8 +80,16 @@ jobs:
           fail_ci_if_error: false
 
   packaging:
-    name: Package build check
-    runs-on: ubuntu-latest
+    name: Package build check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        # bash exists on all three runners; keeps globs and venv paths uniform
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -113,7 +122,9 @@ jobs:
       - name: Install the wheel in a clean venv and run it
         working-directory: packages/python-sdk
         run: |
-          python -m venv /tmp/wheel-check
-          /tmp/wheel-check/bin/pip install dist/*.whl
-          /tmp/wheel-check/bin/apex-pred --version
-          /tmp/wheel-check/bin/apex-pred config --show
+          python -m venv wheel-check
+          # venv layout differs per OS: bin/ on Unix, Scripts/ on Windows
+          if [ "$RUNNER_OS" = "Windows" ]; then BIN=Scripts; else BIN=bin; fi
+          "wheel-check/$BIN/pip" install dist/*.whl
+          "wheel-check/$BIN/apex-pred" --version
+          "wheel-check/$BIN/apex-pred" config --show
