@@ -6,13 +6,63 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
-  release-npm:
-    name: Publish to npm
+  verify:
+    name: Verify tag and run tests
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Resolve version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check both packages match the tag
+        env:
+          TAG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          NPM_VERSION=$(node -p "require('./packages/cli/package.json').version")
+          PY_VERSION=$(python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('packages/python-sdk/pyproject.toml').read_text())['project']['version'])")
+          echo "tag=$TAG_VERSION npm=$NPM_VERSION pypi=$PY_VERSION"
+          if [ "$NPM_VERSION" != "$TAG_VERSION" ] || [ "$PY_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Version mismatch — bump packages/cli/package.json and packages/python-sdk/pyproject.toml to $TAG_VERSION before tagging"
+            exit 1
+          fi
+
+      - name: Test the TypeScript CLI
+        run: |
+          npm ci
+          npm run lint -w packages/cli
+          npm run typecheck -w packages/cli
+          npm run build -w packages/cli
+
+      - name: Test the Python SDK
+        working-directory: packages/python-sdk
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          ruff check apex_pred/ tests/
+          mypy apex_pred/
+          pytest tests/ -v
+
+  publish-npm:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,40 +70,100 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
+
+      - name: Ensure the npm token is configured
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is not set — add it under Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
       - run: npm ci
       - run: npm run build -w packages/cli
-      - name: Publish CLI
+
+      - name: Publish @apex-pred/cli
         working-directory: packages/cli
-        run: npm publish --access public
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  release-pypi:
+      - name: Pack the tarball for the GitHub release
+        working-directory: packages/cli
+        run: npm pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball
+          path: packages/cli/*.tgz
+
+  publish-pypi:
     name: Publish to PyPI
+    needs: verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # PyPI trusted publishing
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Build package
+
+      - name: Build and check the distributions
         working-directory: packages/python-sdk
         run: |
-          pip install build
+          python -m pip install --upgrade pip build twine
           python -m build
-      - name: Publish to PyPI
+          python -m twine check dist/*
+
+      # `secrets` is not available in `if:`, so surface it as a step output first
+      - name: Detect the publish method
+        id: method
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -n "$PYPI_API_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish with an API token
+        if: steps.method.outputs.has_token == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/python-sdk/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+      # Needs a PyPI trusted publisher for this repo + workflow; see CONTRIBUTING.md
+      - name: Publish with trusted publishing
+        if: steps.method.outputs.has_token == 'false'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/python-sdk/dist/
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: packages/python-sdk/dist/*
+
   create-release:
     name: Create GitHub Release
+    needs: [verify, publish-npm, publish-pypi]
     runs-on: ubuntu-latest
-    needs: [release-npm, release-pypi]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
       - name: Generate changelog
         id: changelog
         run: |
@@ -61,14 +171,18 @@ jobs:
           if [ -z "$PREV_TAG" ]; then
             COMMITS=$(git log --oneline)
           else
-            COMMITS=$(git log --oneline ${PREV_TAG}..HEAD)
+            COMMITS=$(git log --oneline "${PREV_TAG}..HEAD")
           fi
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMITS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "CHANGELOG<<EOF"
+            echo "$COMMITS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          files: release-assets/*
           body: |
             ## What's Changed
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -72,7 +72,7 @@ def get_config() -> ApexConfig:
     return ApexConfig()
 
 
-def set_config(updates: dict) -> None:
+def set_config(updates: dict[str, object]) -> None:
     config = get_config()
     for key, value in updates.items():
         if hasattr(config, key):

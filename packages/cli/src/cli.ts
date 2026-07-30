@@ -36,7 +36,7 @@ function printBanner(): void {
   );
 }
 
-export async function startInteractive(config: ApexConfig): Promise<void> {
+export function startInteractive(config: ApexConfig): Promise<void> {
   printBanner();
 
   const agent = new ApexPredAgent(config);
@@ -61,7 +61,7 @@ export async function startInteractive(config: ApexConfig): Promise<void> {
   // Guard against concurrent chat calls if lines arrive while a response is streaming
   let inFlight = false;
 
-  rl.on('line', async (line) => {
+  const handleLine = async (line: string): Promise<void> => {
     const input = line.trim();
 
     if (!input) {
@@ -151,11 +151,20 @@ export async function startInteractive(config: ApexConfig): Promise<void> {
       rl.resume();
       rl.prompt();
     }
+  };
+
+  // readline listeners must be synchronous — hand the async work off explicitly
+  rl.on('line', (line) => {
+    void handleLine(line);
   });
 
-  rl.on('close', () => {
-    console.log(theme.muted('\nApex-Pred out. Stay sharp.\n'));
-    process.exit(0);
+  // Resolve only once the REPL is actually done, so callers can await the session
+  return new Promise<void>((resolve) => {
+    rl.on('close', () => {
+      console.log(theme.muted('\nApex-Pred out. Stay sharp.\n'));
+      resolve();
+      process.exit(0);
+    });
   });
 }
 

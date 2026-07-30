@@ -160,7 +160,7 @@ export class ApexPredAgent {
       process.stdout.write('\n' + theme.aiLabel());
 
       try {
-        const stream = await this.client.messages.stream({
+        const stream = this.client.messages.stream({
           model: this.config.model,
           max_tokens: this.config.maxTokens,
           system: APEX_PRED_SYSTEM_PROMPT,

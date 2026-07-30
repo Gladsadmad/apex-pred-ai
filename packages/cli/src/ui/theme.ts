@@ -14,13 +14,13 @@ export const theme = {
   bold: chalk.bold,
   italic: chalk.italic,
 
-  banner: (text: string) => chalk.hex('#FF4500').bold(text),
-  userPrompt: (text: string) => chalk.hex('#FFD700').bold(`You: ${text}`),
-  aiLabel: () => chalk.hex('#FF4500').bold('Apex-Pred: '),
-  toolCall: (name: string) => chalk.hex('#FF8C00')(`⚡ ${name}`),
-  toolResult: (text: string) => chalk.hex('#888888')(text),
-  thinking: () => chalk.hex('#888888').italic('thinking...'),
-  separator: () => chalk.hex('#333333')('─'.repeat(60)),
+  banner: (text: string): string => chalk.hex('#FF4500').bold(text),
+  userPrompt: (text: string): string => chalk.hex('#FFD700').bold(`You: ${text}`),
+  aiLabel: (): string => chalk.hex('#FF4500').bold('Apex-Pred: '),
+  toolCall: (name: string): string => chalk.hex('#FF8C00')(`⚡ ${name}`),
+  toolResult: (text: string): string => chalk.hex('#888888')(text),
+  thinking: (): string => chalk.hex('#888888').italic('thinking...'),
+  separator: (): string => chalk.hex('#333333')('─'.repeat(60)),
 
   boxConfig: {
     borderColor: 'red' as const,
