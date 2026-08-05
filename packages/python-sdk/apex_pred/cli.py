@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import sys
-from importlib import metadata
 from typing import Any
 
 import typer
@@ -13,6 +12,7 @@ from rich.prompt import Prompt
 from rich.text import Text
 from typer.core import TyperGroup
 
+from ._version import get_version
 from .agent import ApexPredAgent
 from .config import ApexConfig, get_config, get_config_path, set_config
 from .personality import APEX_PRED_BANNER, WELCOME_MESSAGE
@@ -85,19 +85,9 @@ def print_banner() -> None:
     console.print(Panel(WELCOME_MESSAGE, border_style="red", padding=(0, 2)))
 
 
-def _package_version() -> str:
-    try:
-        return metadata.version("apex-pred-ai")
-    except metadata.PackageNotFoundError:
-        # Running straight from a source checkout
-        from . import __version__
-
-        return __version__
-
-
 def _version_callback(value: bool) -> None:
     if value:
-        console.print(f"Apex-Pred AI v{_package_version()}")
+        console.print(f"Apex-Pred AI v{get_version()}")
         raise typer.Exit()
 
 

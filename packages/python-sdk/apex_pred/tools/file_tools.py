@@ -12,12 +12,23 @@ async def _read_file(path: str, start_line: int = 1, end_line: int | None = None
         content = p.read_text(encoding="utf-8", errors="replace")
         lines = content.splitlines()
         total = len(lines)
-        end = end_line or total
-        selected = lines[start_line - 1:end]
+        if total == 0:
+            return f"File: {p} (empty)"
+
+        # Clamp rather than let out-of-range values become negative slice
+        # indices, which silently return lines from the end of the file
+        start = max(1, start_line)
+        end = total if end_line is None else min(total, end_line)
+        if start > total:
+            return f"Error: start_line {start} is past the end of {p} ({total} lines)"
+        if start > end:
+            return f"Error: start_line {start} is after end_line {end} in {p}"
+
+        selected = lines[start - 1:end]
         numbered = "\n".join(
-            f"{start_line + i:4d}\t{line}" for i, line in enumerate(selected)
+            f"{start + i:4d}\t{line}" for i, line in enumerate(selected)
         )
-        return f"File: {p} (lines {start_line}-{end} of {total})\n\n{numbered}"
+        return f"File: {p} (lines {start}-{end} of {total})\n\n{numbered}"
     except Exception as e:
         return f"Error reading file: {e}"
 

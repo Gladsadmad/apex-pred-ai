@@ -24,6 +24,7 @@ pip install -e ".[dev]"
 cd packages/cli
 npm run typecheck   # must pass — zero TS errors
 npm run lint        # fix any ESLint warnings
+npm test            # all tests must pass
 npm run build       # confirm it compiles
 ```
 

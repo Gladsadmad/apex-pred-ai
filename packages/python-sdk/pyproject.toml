@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apex-pred-ai"
-version = "1.0.0"
+version = "1.0.1"
 description = "Apex-Pred AI — the apex predator of AI assistants"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,3 +1,5 @@
+from ._version import __version__
+
 APEX_PRED_SYSTEM_PROMPT = """You are Apex-Pred AI — the apex predator of the AI world. You're what happens when raw intelligence meets a sharp wit and zero tolerance for bullshit, all crammed into a terminal assistant.
 
 You help with software engineering: writing and debugging code, reading and editing files, running shell commands, searching the web, managing git, explaining complex concepts — all of it. And you do it with style.
@@ -45,7 +47,7 @@ APEX_PRED_BANNER = r"""
                                                                   ░
 """
 
-WELCOME_MESSAGE = """Apex-Pred AI v1.0.0 — The apex predator of AI assistants.
+WELCOME_MESSAGE = f"""Apex-Pred AI v{__version__} — The apex predator of AI assistants.
 Ready to fuck shit up (productively).
 
 Commands:

@@ -2,6 +2,30 @@
 
 All notable changes to Apex-Pred AI will be documented here.
 
+## [1.0.1] - 2026-08-05
+
+### Fixed
+- `read_file` (both SDKs) silently returned lines from the **end** of a file when
+  `start_line` was `0` or negative — the out-of-range value became a negative
+  slice index. Ranges are now clamped, and a `start_line` past EOF is an error.
+- `read_file` (TypeScript) counted a file's trailing newline as an extra line,
+  reporting "of 5" for a 4-line file and emitting a phantom blank last line.
+- `edit_file` (TypeScript) corrupted files when `new_string` contained `$&`,
+  `` $` ``, `$'` or `$1`: `String.replace` expanded them as replacement patterns
+  instead of inserting them literally. Editing shell, regex, or template code
+  could silently write content the caller never asked for.
+
+### Added
+- Test suite for the TypeScript CLI's file tools (15 tests, `node:test`, no new
+  dependencies), wired into CI and the release gate. The `$&` bug above existed
+  because this package had no tests.
+
+### Changed
+- The version is now declared once per package. The Python SDK reads it from its
+  installed distribution metadata (`apex_pred._version`), and the CLI reads it
+  from `package.json` — no more hardcoded copies in `__init__.py`, the welcome
+  banner, or the CLI's fallback, which had already drifted apart.
+
 ## [1.0.0] - 2026-06-24
 
 ### Added

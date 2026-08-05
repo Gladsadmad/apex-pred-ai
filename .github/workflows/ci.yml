@@ -34,6 +34,8 @@ jobs:
         run: npm run lint -w packages/cli
       - name: Typecheck
         run: npm run typecheck -w packages/cli
+      - name: Test
+        run: npm run test -w packages/cli
       - name: Build
         run: npm run build -w packages/cli
       - name: Smoke test the built CLI

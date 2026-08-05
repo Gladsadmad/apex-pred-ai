@@ -108,6 +108,52 @@ class TestFileTools:
         result = await _read_file("/nonexistent/path/file.txt")
         assert "Error" in result
 
+    @pytest.mark.asyncio
+    async def test_read_start_line_zero_does_not_wrap(self) -> None:
+        """start_line=0 used to become lines[-1:], silently returning the last line."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.txt")
+            await _write_file(path, "alpha\nbravo\ncharlie\ndelta")
+            result = await _read_file(path, start_line=0)
+            assert "alpha" in result
+            assert "bravo" in result
+            assert "of 4" in result
+
+    @pytest.mark.asyncio
+    async def test_read_negative_start_line_does_not_wrap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.txt")
+            await _write_file(path, "alpha\nbravo\ncharlie\ndelta")
+            result = await _read_file(path, start_line=-2)
+            assert "alpha" in result
+
+    @pytest.mark.asyncio
+    async def test_read_start_line_past_end_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.txt")
+            await _write_file(path, "alpha\nbravo")
+            result = await _read_file(path, start_line=99)
+            assert "Error" in result
+
+    @pytest.mark.asyncio
+    async def test_read_end_line_past_end_is_clamped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.txt")
+            await _write_file(path, "alpha\nbravo")
+            result = await _read_file(path, start_line=1, end_line=500)
+            assert "alpha" in result
+            assert "bravo" in result
+            assert "lines 1-2 of 2" in result
+
+    @pytest.mark.asyncio
+    async def test_edit_replacement_with_dollar_signs_is_literal(self) -> None:
+        """Regex-style tokens in new_string must be inserted verbatim."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "test.txt")
+            await _write_file(path, "price: TOKEN end")
+            await _edit_file(path, "TOKEN", "$& and $` literal")
+            assert Path(path).read_text() == "price: $& and $` literal end"
+
 
 # ---------------------------------------------------------------------------
 # Bash tool

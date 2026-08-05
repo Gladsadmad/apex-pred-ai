@@ -45,6 +45,7 @@ jobs:
           npm ci
           npm run lint -w packages/cli
           npm run typecheck -w packages/cli
+          npm run test -w packages/cli
           npm run build -w packages/cli
 
       - name: Test the Python SDK

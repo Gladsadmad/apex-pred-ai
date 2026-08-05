@@ -206,6 +206,7 @@ pytest tests/ -v
 
 # TypeScript
 cd packages/cli
+npm test
 npm run typecheck
 ```
 

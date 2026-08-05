@@ -30,12 +30,14 @@ interface ConfigOptions {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgPath = join(__dirname, '..', 'package.json');
-let version = '1.0.0';
+// package.json is the single source of truth — a hardcoded fallback here would
+// silently report a stale version after every release
+let version = 'unknown';
 try {
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
   version = pkg.version;
 } catch {
-  // ignore — fall back to hardcoded version
+  // ignore — the package.json is missing or unreadable
 }
 
 program

@@ -23,6 +23,7 @@ venv/
 coverage/
 .nyc_output/
 *.tsbuildinfo
+.test-build/
 # Local `npm pack` / `python -m build` output
 *.tgz
 .apex-pred-config.json

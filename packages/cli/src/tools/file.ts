@@ -30,14 +30,31 @@ export const readFileTool: ToolDefinition = {
     const filePath = path.resolve(input['path'] as string);
     try {
       const content = await fs.readFile(filePath, 'utf-8');
+      // A trailing newline terminates the last line, it does not start a new one
       const lines = content.split('\n');
-      const startLine = (input['start_line'] as number | undefined) ?? 1;
-      const endLine = (input['end_line'] as number | undefined) ?? lines.length;
+      if (lines[lines.length - 1] === '') lines.pop();
+      const total = lines.length;
+
+      // Clamp rather than let out-of-range values become negative slice
+      // indices, which silently return lines from the end of the file
+      const rawStart = (input['start_line'] as number | undefined) ?? 1;
+      const rawEnd = (input['end_line'] as number | undefined) ?? total;
+      const startLine = Math.max(1, Math.trunc(rawStart));
+      const endLine = Math.min(total, Math.trunc(rawEnd));
+
+      if (total === 0) return `File: ${filePath} (empty)`;
+      if (startLine > total) {
+        return `Error: start_line ${startLine} is past the end of ${filePath} (${total} lines)`;
+      }
+      if (startLine > endLine) {
+        return `Error: start_line ${startLine} is after end_line ${endLine} in ${filePath}`;
+      }
+
       const selectedLines = lines.slice(startLine - 1, endLine);
       const numbered = selectedLines
         .map((line, i) => `${(startLine + i).toString().padStart(4, ' ')}\t${line}`)
         .join('\n');
-      return `File: ${filePath} (lines ${startLine}-${endLine} of ${lines.length})\n\n${numbered}`;
+      return `File: ${filePath} (lines ${startLine}-${endLine} of ${total})\n\n${numbered}`;
     } catch (err) {
       const error = err as NodeJS.ErrnoException;
       return `Error reading file: ${error.message}`;
@@ -120,10 +137,13 @@ export const editFileTool: ToolDefinition = {
       if (!replaceAll && occurrences > 1) {
         return `Error: found ${occurrences} occurrences of the string in ${filePath}. Use replace_all: true or provide more context to make it unique.`;
       }
+      // Never use String.replace with a string replacement: `$&`, `$1`, "$`"
+      // etc. in new_string would be expanded instead of inserted literally
       if (replaceAll) {
         content = content.split(oldStr).join(newStr);
       } else {
-        content = content.replace(oldStr, newStr);
+        const at = content.indexOf(oldStr);
+        content = content.slice(0, at) + newStr + content.slice(at + oldStr.length);
       }
       await fs.writeFile(filePath, content, 'utf-8');
       return `Replaced ${replaceAll ? occurrences : 1} occurrence(s) in ${filePath}`;

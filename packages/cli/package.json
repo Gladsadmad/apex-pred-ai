@@ -1,6 +1,6 @@
 {
   "name": "@apex-pred/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Apex-Pred AI CLI — the apex predator of terminal assistants",
   "license": "MIT",
   "author": "Gladsadmad",
@@ -21,9 +21,11 @@
     "build": "tsc",
     "prepack": "npm run build",
     "dev": "tsc --watch",
-    "clean": "rimraf dist",
-    "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "clean": "rimraf dist .test-build",
+    "lint": "eslint src test --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "pretest": "tsc -p tsconfig.test.json",
+    "test": "cd .test-build && node --test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
