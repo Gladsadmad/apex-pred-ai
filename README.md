@@ -58,8 +58,11 @@ export ANTHROPIC_API_KEY=sk-ant-...
 # Interactive
 apex-pred
 
-# One-shot
+# One-shot (or spell it out: apex-pred chat "...")
 apex-pred "explain this stack trace"
+
+# Version
+apex-pred --version
 
 # Use as a library
 python -c "
@@ -134,9 +137,10 @@ apex-pred config --key sk-ant-...
 apex-pred config --show
 ```
 
-Config is stored at:
-- **TypeScript**: `~/.config/apex-pred-ai/config.json` (platform-specific)
-- **Python**: `~/.config/apex-pred-ai/config.json`
+Config is stored in a platform-specific directory — run `apex config --show` or
+`apex-pred config --show` to see the exact path. On Linux that's
+`~/.config/apex-pred-ai-nodejs/config.json` for the TypeScript CLI and
+`~/.config/apex-pred-ai/config.json` for the Python SDK.
 
 ---
 
@@ -172,7 +176,8 @@ apex-pred-ai/
 ├── packages/
 │   ├── cli/                    # TypeScript CLI (primary)
 │   │   └── src/
-│   │       ├── index.ts        # Entry point + CLI commands
+│   │       ├── index.ts        # Executable entry + CLI commands
+│   │       ├── lib.ts          # Library entry (package main)
 │   │       ├── cli.ts          # Interactive REPL
 │   │       ├── agent.ts        # Agent loop with streaming
 │   │       ├── personality.ts  # System prompt

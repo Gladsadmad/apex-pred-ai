@@ -1,24 +1,71 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
-from typing import Optional
+from importlib import metadata
+from typing import Any
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.text import Text
+from typer.core import TyperGroup
 
 from .agent import ApexPredAgent
-from .config import get_config, set_config, get_config_path, ApexConfig
+from .config import ApexConfig, get_config, get_config_path, set_config
 from .personality import APEX_PRED_BANNER, WELCOME_MESSAGE
+
+
+def _tolerate_narrow_encodings() -> None:
+    """Never crash on glyphs the active console encoding can't represent.
+
+    Legacy Windows consoles report cp1252 stdout, and C-locale Unix reports
+    ASCII; rich then dies with UnicodeEncodeError writing ✓/✗/⚡. Substituting
+    "?" for the odd glyph beats a crash — UTF-8 terminals are unaffected
+    because every glyph encodes and "replace" never fires.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            # Closed or exotic streams can refuse — leave those be
+            with contextlib.suppress(ValueError, OSError):
+                reconfigure(errors="replace")
+
+
+_tolerate_narrow_encodings()
+
+
+class ImplicitChatGroup(TyperGroup):
+    """Routes anything that isn't a known command to `chat`.
+
+    A variadic argument on the group callback would swallow subcommand names
+    ("apex-pred config" parsed as the message "config"), so the one-shot
+    message lives on its own command and unrecognized tokens are sent there.
+
+    Typed loosely on purpose: Typer vendors its own copy of click in newer
+    releases, so the concrete Context/Command classes here vary by version.
+    """
+
+    def resolve_command(
+        self, ctx: Any, args: list[str]
+    ) -> tuple[str | None, Any, list[str]]:
+        # Leave options and real command names alone; everything else is a message
+        if args and not args[0].startswith("-") and args[0] not in self.commands:
+            chat_cmd = self.get_command(ctx, "chat")
+            if chat_cmd is not None:
+                # Hand the tokens over untouched — `chat` parses them as the message
+                return "chat", chat_cmd, args
+        return super().resolve_command(ctx, args)
+
 
 app = typer.Typer(
     name="apex-pred",
     help="Apex-Pred AI — the apex predator of AI assistants",
     add_completion=False,
     rich_markup_mode="rich",
+    cls=ImplicitChatGroup,
 )
 
 console = Console()
@@ -38,21 +85,32 @@ def print_banner() -> None:
     console.print(Panel(WELCOME_MESSAGE, border_style="red", padding=(0, 2)))
 
 
-@app.callback(invoke_without_command=True)
-def main(
-    ctx: typer.Context,
-    message: Optional[list[str]] = typer.Argument(None, help="One-shot message to send"),
-    key: Optional[str] = typer.Option(None, "--key", "-k", help="Anthropic API key"),
-    model: Optional[str] = typer.Option(None, "--model", "-m", help="Model to use"),
-    max_tokens: Optional[int] = typer.Option(None, "--max-tokens", "-t", help="Max tokens"),
-    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming"),
-    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
-) -> None:
-    """Start Apex-Pred AI. Provide a message for one-shot mode, or run interactively."""
-    if ctx.invoked_subcommand is not None:
-        return
+def _package_version() -> str:
+    try:
+        return metadata.version("apex-pred-ai")
+    except metadata.PackageNotFoundError:
+        # Running straight from a source checkout
+        from . import __version__
 
-    cfg = get_config()
+        return __version__
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(f"Apex-Pred AI v{_package_version()}")
+        raise typer.Exit()
+
+
+def _resolve_config(
+    key: str | None,
+    model: str | None,
+    max_tokens: int | None,
+    no_stream: bool,
+    debug: bool,
+    base: ApexConfig | None = None,
+) -> ApexConfig:
+    """Apply command-line overrides on top of the stored config."""
+    cfg = base if base is not None else get_config()
     if key:
         cfg.api_key = key
     if model:
@@ -63,11 +121,54 @@ def main(
         cfg.streaming_enabled = False
     if debug:
         cfg.debug = True
+    return cfg
 
-    if message:
-        asyncio.run(_one_shot(" ".join(message), cfg))
-    else:
-        asyncio.run(_interactive(cfg))
+
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    key: str | None = typer.Option(None, "--key", "-k", help="Anthropic API key"),
+    model: str | None = typer.Option(None, "--model", "-m", help="Model to use"),
+    max_tokens: int | None = typer.Option(None, "--max-tokens", "-t", help="Max tokens"),
+    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
+    version: bool | None = typer.Option(
+        None,
+        "--version",
+        "-v",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit",
+    ),
+) -> None:
+    """Start Apex-Pred AI.
+
+    Run bare for an interactive session, or pass a message for one-shot mode.
+    """
+    cfg = _resolve_config(key, model, max_tokens, no_stream, debug)
+    # Hand the resolved config to whichever subcommand runs next
+    ctx.obj = cfg
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    asyncio.run(_interactive(cfg))
+
+
+@app.command()
+def chat(
+    ctx: typer.Context,
+    message: list[str] = typer.Argument(..., help="Message to send"),
+    key: str | None = typer.Option(None, "--key", "-k", help="Anthropic API key"),
+    model: str | None = typer.Option(None, "--model", "-m", help="Model to use"),
+    max_tokens: int | None = typer.Option(None, "--max-tokens", "-t", help="Max tokens"),
+    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
+) -> None:
+    """Send one message and print the reply. Implied when you pass a bare message."""
+    base = ctx.obj if isinstance(ctx.obj, ApexConfig) else None
+    cfg = _resolve_config(key, model, max_tokens, no_stream, debug, base=base)
+    asyncio.run(_one_shot(" ".join(message), cfg))
 
 
 async def _one_shot(message: str, config: ApexConfig) -> None:
@@ -155,9 +256,9 @@ async def _interactive(config: ApexConfig) -> None:
 
 @app.command()
 def config(
-    key: Optional[str] = typer.Option(None, "--key", "-k", help="Set API key"),
-    model: Optional[str] = typer.Option(None, "--model", "-m", help="Set default model"),
-    max_tokens: Optional[int] = typer.Option(None, "--max-tokens", "-t", help="Set max tokens"),
+    key: str | None = typer.Option(None, "--key", "-k", help="Set API key"),
+    model: str | None = typer.Option(None, "--model", "-m", help="Set default model"),
+    max_tokens: int | None = typer.Option(None, "--max-tokens", "-t", help="Set max tokens"),
     show: bool = typer.Option(False, "--show", help="Show current config"),
 ) -> None:
     """View or update Apex-Pred AI configuration."""

@@ -2,31 +2,57 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [main]
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  lint-and-typecheck-ts:
-    name: TypeScript Lint & Typecheck
-    runs-on: ubuntu-latest
+  cli:
+    name: TypeScript CLI (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: ['18', '20', '22']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
       - run: npm ci
-      - run: npm run build -w packages/cli
-      - run: npm run typecheck -w packages/cli
+      - name: Lint
+        run: npm run lint -w packages/cli
+      - name: Typecheck
+        run: npm run typecheck -w packages/cli
+      - name: Build
+        run: npm run build -w packages/cli
+      - name: Smoke test the built CLI
+        run: |
+          node packages/cli/bin/apex.js --version
+          node packages/cli/bin/apex.js version
+          node packages/cli/bin/apex.js config --show
+      - name: Verify the publish tarball
+        working-directory: packages/cli
+        run: npm pack --dry-run
 
-  test-python:
-    name: Python Tests
+  python-sdk:
+    name: Python SDK (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,7 +65,7 @@ jobs:
           pip install -e ".[dev]"
       - name: Lint with ruff
         working-directory: packages/python-sdk
-        run: ruff check apex_pred/
+        run: ruff check apex_pred/ tests/
       - name: Type check
         working-directory: packages/python-sdk
         run: mypy apex_pred/
@@ -52,3 +78,53 @@ jobs:
         with:
           file: packages/python-sdk/coverage.xml
           fail_ci_if_error: false
+
+  packaging:
+    name: Package build check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        # bash exists on all three runners; keeps globs and venv paths uniform
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the npm package
+        run: |
+          npm ci
+          npm run build -w packages/cli
+      - name: Pack the npm tarball
+        working-directory: packages/cli
+        run: npm pack
+      - name: Install the packed tarball and run the binaries
+        run: |
+          npm install -g packages/cli/apex-pred-cli-*.tgz
+          apex --version
+          apex-pred --version
+
+      - name: Build the Python sdist and wheel
+        working-directory: packages/python-sdk
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+      - name: Install the wheel in a clean venv and run it
+        working-directory: packages/python-sdk
+        run: |
+          python -m venv wheel-check
+          # venv layout differs per OS: bin/ on Unix, Scripts/ on Windows
+          if [ "$RUNNER_OS" = "Windows" ]; then BIN=Scripts; else BIN=bin; fi
+          "wheel-check/$BIN/pip" install dist/*.whl
+          "wheel-check/$BIN/apex-pred" --version
+          "wheel-check/$BIN/apex-pred" config --show

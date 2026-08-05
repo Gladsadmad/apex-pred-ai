@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 import inspect
 import sys
-from typing import Any
+from typing import Any, cast
 
 import anthropic
+from anthropic.types import MessageParam
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -15,8 +16,8 @@ from .config import ApexConfig
 from .personality import APEX_PRED_SYSTEM_PROMPT
 from .session import SessionManager
 from .tools import ALL_TOOLS
-from .tools.file_tools import TOOL_HANDLERS as FILE_HANDLERS
 from .tools.bash_tools import TOOL_HANDLERS as BASH_HANDLERS
+from .tools.file_tools import TOOL_HANDLERS as FILE_HANDLERS
 from .tools.git_tools import TOOL_HANDLERS as GIT_HANDLERS
 from .tools.web_tools import TOOL_HANDLERS as WEB_HANDLERS
 
@@ -49,6 +50,14 @@ class ApexPredAgent:
         self.async_client = anthropic.AsyncAnthropic(api_key=api_key)
         self.session = SessionManager(config.session_history_dir, config.effective_model())
 
+    def _api_messages(self) -> list[MessageParam]:
+        """Session history in the shape the Messages API expects.
+
+        The session stores plain dicts so it can round-trip through JSON; the
+        SDK's TypedDicts are structurally the same thing at runtime.
+        """
+        return cast("list[MessageParam]", self.session.get_messages())
+
     async def chat(self, user_message: str) -> None:
         self.session.add_message({"role": "user", "content": user_message})
         await self._run_agent_loop()
@@ -62,7 +71,7 @@ class ApexPredAgent:
                         model=self.config.effective_model(),
                         max_tokens=self.config.effective_max_tokens(),
                         system=APEX_PRED_SYSTEM_PROMPT,
-                        messages=self.session.get_messages(),
+                        messages=self._api_messages(),
                         tools=ALL_TOOLS,
                     )
                 except anthropic.AuthenticationError:
@@ -112,7 +121,7 @@ class ApexPredAgent:
                     model=self.config.effective_model(),
                     max_tokens=self.config.effective_max_tokens(),
                     system=APEX_PRED_SYSTEM_PROMPT,
-                    messages=self.session.get_messages(),
+                    messages=self._api_messages(),
                     tools=ALL_TOOLS,
                 ) as stream:
                     async for text in stream.text_stream:

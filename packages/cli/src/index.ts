@@ -6,6 +6,28 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
+/** Options parsed by Commander for the default (root) command. */
+interface RootOptions {
+  key?: string;
+  model?: string;
+  maxTokens?: number;
+  /** Commander sets this to false when --no-stream is passed. */
+  stream?: boolean;
+  debug?: boolean;
+}
+
+/** Options parsed by Commander for `apex config`. */
+interface ConfigOptions {
+  key?: string;
+  model?: string;
+  maxTokens?: number;
+  enableStream?: boolean;
+  disableStream?: boolean;
+  enableDebug?: boolean;
+  disableDebug?: boolean;
+  show?: boolean;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgPath = join(__dirname, '..', 'package.json');
 let version = '1.0.0';
@@ -26,14 +48,14 @@ program
   .option('-t, --max-tokens <tokens>', 'Max tokens per response', parseInt)
   .option('--no-stream', 'Disable streaming output')
   .option('--debug', 'Enable debug logging')
-  .action(async (messageParts: string[], opts) => {
+  .action(async (messageParts: string[], opts: RootOptions) => {
     const config = getConfig();
 
-    if (opts['key']) config.apiKey = opts['key'] as string;
-    if (opts['model']) config.model = opts['model'] as string;
-    if (opts['maxTokens']) config.maxTokens = opts['maxTokens'] as number;
-    if (opts['stream'] === false) config.streamingEnabled = false;
-    if (opts['debug']) config.debug = true;
+    if (opts.key) config.apiKey = opts.key;
+    if (opts.model) config.model = opts.model;
+    if (opts.maxTokens) config.maxTokens = opts.maxTokens;
+    if (opts.stream === false) config.streamingEnabled = false;
+    if (opts.debug) config.debug = true;
 
     if (messageParts.length > 0) {
       await runOneShot(messageParts.join(' '), config);
@@ -53,20 +75,21 @@ program
   .option('--enable-debug', 'Enable debug mode')
   .option('--disable-debug', 'Disable debug mode')
   .option('--show', 'Show current config and exit')
-  .action((opts) => {
+  .action((opts: ConfigOptions) => {
     const config = getConfig();
 
     // Determine whether any write flags were explicitly passed
-    const hasUpdate =
-      opts['key'] ||
-      opts['model'] ||
-      opts['maxTokens'] ||
-      opts['enableStream'] ||
-      opts['disableStream'] ||
-      opts['enableDebug'] ||
-      opts['disableDebug'];
+    const hasUpdate = Boolean(
+      opts.key ||
+        opts.model ||
+        opts.maxTokens ||
+        opts.enableStream ||
+        opts.disableStream ||
+        opts.enableDebug ||
+        opts.disableDebug
+    );
 
-    if (opts['show'] || !hasUpdate) {
+    if (opts.show || !hasUpdate) {
       console.log(chalk.hex('#FF4500').bold('\nApex-Pred AI Configuration'));
       console.log(chalk.hex('#888888')(`Config file: ${getConfigPath()}\n`));
       console.log(`  API Key:    ${config.apiKey ? chalk.green('✓ set') : chalk.red('✗ not set')}`);
@@ -79,14 +102,14 @@ program
     }
 
     const updates: Record<string, unknown> = {};
-    if (opts['key']) updates['apiKey'] = opts['key'];
-    if (opts['model']) updates['model'] = opts['model'];
-    if (opts['maxTokens']) updates['maxTokens'] = opts['maxTokens'];
+    if (opts.key) updates['apiKey'] = opts.key;
+    if (opts.model) updates['model'] = opts.model;
+    if (opts.maxTokens) updates['maxTokens'] = opts.maxTokens;
     // Use explicit enable/disable flags so Commander defaults never bleed in
-    if (opts['enableStream']) updates['streamingEnabled'] = true;
-    if (opts['disableStream']) updates['streamingEnabled'] = false;
-    if (opts['enableDebug']) updates['debug'] = true;
-    if (opts['disableDebug']) updates['debug'] = false;
+    if (opts.enableStream) updates['streamingEnabled'] = true;
+    if (opts.disableStream) updates['streamingEnabled'] = false;
+    if (opts.enableDebug) updates['debug'] = true;
+    if (opts.disableDebug) updates['debug'] = false;
 
     setConfig(updates);
     console.log(chalk.green('\n✓ Configuration updated.\n'));

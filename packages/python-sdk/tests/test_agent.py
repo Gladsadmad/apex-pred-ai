@@ -10,10 +10,8 @@ import pytest_asyncio  # noqa: F401  — ensures asyncio mode is registered
 
 from apex_pred.config import ApexConfig
 from apex_pred.session import SessionManager
-from apex_pred.tools.file_tools import _read_file, _write_file, _edit_file, _list_files
 from apex_pred.tools.bash_tools import _bash
-from apex_pred.tools.web_tools import _web_fetch
-
+from apex_pred.tools.file_tools import _edit_file, _list_files, _read_file, _write_file
 
 # ---------------------------------------------------------------------------
 # SessionManager
